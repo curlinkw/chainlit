@@ -124,9 +124,11 @@ module = [
     "azure.storage.blob.aio",
     "google.auth",
     "google.oauth2",
+    "minio.*"
 ]
 
 ignore_missing_imports = true
+
 
 
 [tool.poetry.group.custom-data]
@@ -140,6 +142,7 @@ azure-identity = "^1.14.1"
 azure-storage-file-datalake = "^12.14.0"
 azure-storage-blob = "^12.24.0"
 google-cloud-storage = "^2.19.0"
+minio = "^7.2.16"
 
 [build-system]
 requires = ["poetry-core==2.1.3"]
