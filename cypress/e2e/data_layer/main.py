@@ -1,3 +1,4 @@
+import os
 import os.path
 import pickle
 from typing import Dict, List, Optional
@@ -17,6 +18,8 @@ from chainlit.types import (
     ThreadFilter,
 )
 from chainlit.utils import utc_now
+
+os.environ["CHAINLIT_AUTH_SECRET"] = "SUPER_SECRET"  # nosec B105
 
 now = utc_now()
 
@@ -193,6 +196,9 @@ class TestDataLayer(cl_data.BaseDataLayer):
 
     async def build_debug_url(self) -> str:
         return ""
+
+    async def close(self) -> None:
+        pass
 
 
 @cl.data_layer
