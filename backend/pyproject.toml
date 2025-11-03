@@ -55,7 +55,7 @@ dependencies = [
     "python-multipart>=0.0.18,<1.0.0",
     "pyjwt>=2.8.0,<3.0.0",
     "audioop-lts>=0.2.1,<0.3.0; python_version>='3.13'",
-    "pydantic-settings>=2.10.1"
+    "pydantic-settings>=2.10.1",
 ]
 
 [project.urls]
@@ -72,7 +72,6 @@ tests = [
     "pytest-asyncio>=0.23.8,<1.0.0",
     "pytest-cov>=5.0.0,<6.0.0",
     "openai>=1.11.1,<2.0.0",
-    "langchain>=0.2.4,<0.3.0",
     "llama-index>=0.13.0,<1.0.0",
     "semantic-kernel>=1.24.0,<2.0.0",
     "tenacity>=8.4.1,<9.0.0",
@@ -105,6 +104,10 @@ custom-data = [
     "azure-storage-blob>=12.24.0,<13.0.0",
     "google-cloud-storage>=2.19.0,<3.0.0",
     "minio>=7.2.18",
+    "langgraph>=1.0.2",
+    "langchain>=1.0.3",
+    "langgraph-checkpoint-postgres>=3.0.0",
+    "langgraph-checkpoint>=3.0.0",
 ]
 
 [build-system]
@@ -156,6 +159,7 @@ module = [
     "azure.storage.blob.aio",
     "google.auth",
     "google.oauth2",
+    "langchain.*"
 ]
 
 ignore_missing_imports = true

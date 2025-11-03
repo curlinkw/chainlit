@@ -21,10 +21,10 @@ class MinioStorageClient(BaseStorageClient):
     Class to enable Minio storage provider
     """
 
-    def init(
+    def __init__(
         self,
         endpoint: str,
-        bucket: str,
+        bucket_name: str,
         access_key: str | None = None,
         secret_key: str | None = None,
         session_token: str | None = None,
@@ -45,13 +45,13 @@ class MinioStorageClient(BaseStorageClient):
             credentials=credentials,
             cert_check=cert_check,
         )
-        self.bucket = bucket
-        self._make_bucket_if_not_exists(bucket=bucket)
+        self.bucket = bucket_name
+        self._make_bucket_if_not_exists(bucket_name=bucket_name)
 
-    def _make_bucket_if_not_exists(self, bucket: str):
+    def _make_bucket_if_not_exists(self, bucket_name: str):
         try:
-            if not (self.client.bucket_exists(bucket_name=bucket)):
-                self.client.make_bucket(bucket_name=bucket)
+            if not (self.client.bucket_exists(bucket_name=bucket_name)):
+                self.client.make_bucket(bucket_name=bucket_name)
         except Exception as e:
             logger.warning(f"MinioStorageClient, bucket error: {e}")
 
@@ -112,3 +112,6 @@ class MinioStorageClient(BaseStorageClient):
 
     async def get_read_url(self, object_key: str) -> str:
         return await make_async(self.sync_get_read_url)(object_key)
+
+    async def close(self) -> None:
+        self.client._http.clear()

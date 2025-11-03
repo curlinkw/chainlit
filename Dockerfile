@@ -8,7 +8,7 @@ RUN pip install --no-cache-dir \
     pipx && \
   pipx ensurepath --global && pipx install uv && \
   apt-get update -y && \
-  apt-get install -y --no-install-recommends wget && \
+  apt-get install -y --no-install-recommends libpq-dev wget && \
   rm -rf /var/lib/apt/lists/* && \
   wget -qO- https://deb.nodesource.com/setup_20.x | bash - && \
   apt-get install -y nodejs && \

@@ -57,6 +57,14 @@ def get_data_layer():
                 azure_storage_key = os.getenv("APP_AZURE_STORAGE_ACCESS_KEY")
                 is_using_azure = bool(azure_storage_account and azure_storage_key)
 
+                # Minio
+                minio_access_key = os.getenv("APP_MINIO_ACCESS_KEY")
+                minio_secret_key = os.getenv("APP_MINIO_SECRET_KEY")
+                minio_endpoint = os.getenv("APP_MINIO_ENDPOINT")
+                is_minio = bool(
+                    minio_access_key and minio_secret_key and minio_endpoint
+                )
+
                 storage_client = None
 
                 if sum([is_using_s3, is_using_gcs, is_using_azure]) > 1:
@@ -92,10 +100,32 @@ def get_data_layer():
                         storage_account=azure_storage_account,
                         storage_key=azure_storage_key,
                     )
+                elif is_minio:
+                    from chainlit.data.storage_clients.minio import MinioStorageClient
 
-                _data_layer = ChainlitDataLayer(
-                    database_url=database_url, storage_client=storage_client
-                )
+                    storage_client = MinioStorageClient(
+                        endpoint=minio_endpoint,
+                        bucket_name=bucket_name,
+                        access_key=minio_access_key,
+                        secret_key=minio_secret_key,
+                        secure=False,
+                    )
+
+                # Langgrapgh checkpointer
+                checkpointer_conn_string = os.getenv("CHECKPOINT_DATABASE_URL")
+
+                if checkpointer_conn_string is None:
+                    _data_layer = ChainlitDataLayer(
+                        database_url=database_url, storage_client=storage_client
+                    )
+                else:
+                    from .langgraph import LanggraphDataLayer
+
+                    _data_layer = LanggraphDataLayer(
+                        database_url=database_url,
+                        storage_client=storage_client,
+                        checkpointer_conn_string=checkpointer_conn_string,
+                    )
             elif api_key := os.environ.get("LITERAL_API_KEY"):
                 # When LITERAL_API_KEY is defined, use Literal AI data layer
                 from .literalai import LiteralDataLayer
