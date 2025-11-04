@@ -47,6 +47,7 @@ class MinioStorageClient(BaseStorageClient):
         )
         self.bucket = bucket_name
         self._make_bucket_if_not_exists(bucket_name=bucket_name)
+        logger.info("MinioStorageClient is initialized")
 
     def _make_bucket_if_not_exists(self, bucket_name: str):
         try:
