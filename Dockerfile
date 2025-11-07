@@ -1,14 +1,11 @@
-FROM python:3.12-slim-bookworm
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 WORKDIR /workspace/chainlit
 
 COPY . /workspace/chainlit
 
-RUN pip install --no-cache-dir \
-    pipx && \
-  pipx ensurepath --global && pipx install uv && \
-  apt-get update -y && \
-  apt-get install -y --no-install-recommends libpq-dev wget && \
+RUN apt-get update -y && \
+  apt-get install -y --no-install-recommends wget libpq-dev && \
   rm -rf /var/lib/apt/lists/* && \
   wget -qO- https://deb.nodesource.com/setup_20.x | bash - && \
   apt-get install -y nodejs && \
