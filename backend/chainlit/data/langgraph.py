@@ -1,6 +1,5 @@
 from typing import Any
 
-from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from psycopg import AsyncConnection, AsyncPipeline
@@ -27,11 +26,6 @@ class LanggraphDataLayer(ChainlitDataLayer):
             storage_client=storage_client,
             show_logger=show_logger,
         )
-
-        with PostgresSaver.from_conn_string(
-            conn_string=checkpointer_conn_string
-        ) as checkpointer:
-            checkpointer.setup()
 
         self._async_pool = AsyncConnectionPool(
             conninfo=checkpointer_conn_string,

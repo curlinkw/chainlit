@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import fnmatch
 import glob
 import json
@@ -54,7 +55,7 @@ from chainlit.config import (
     public_dir,
     reload_config,
 )
-from chainlit.data import get_data_layer
+from chainlit.data import _data_layer_initialized, get_data_layer
 from chainlit.data.acl import is_thread_author
 from chainlit.logger import logger
 from chainlit.markdown import get_markdown_str
@@ -255,6 +256,18 @@ app.add_middleware(SafariWebSocketsCompatibleGZipMiddleware)
 
 # config.run.root_path is only set when started with --root-path. Not on submounts.
 router = APIRouter(prefix=config.run.root_path)
+
+
+@router.get("/health")
+async def healthcheck():
+    if not _data_layer_initialized:
+        raise HTTPException(
+            status_code=503, detail="Service not ready: data layer os not initialized"
+        )
+    return {
+        "status": "healthy",
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }
 
 
 @router.get("/public/{filename:path}")
