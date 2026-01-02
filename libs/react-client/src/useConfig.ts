@@ -14,9 +14,7 @@ const useConfig = () => {
 
   // Build the API URL with optional chat profile parameter
   const apiUrl = isAuthenticated
-    ? `/project/settings?language=${language}${
-        chatProfile ? `&chat_profile=${encodeURIComponent(chatProfile)}` : ''
-      }`
+    ? `/project/settings?language=${language}${chatProfile ? `&chat_profile=${encodeURIComponent(chatProfile)}` : ''}`
     : null;
 
   // Always fetch if we don't have config and we're authenticated

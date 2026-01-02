@@ -1,4 +1,10 @@
-import { MutableRefObject, useCallback, useRef, useState } from 'react';
+import {
+  MutableRefObject,
+  useCallback,
+  useEffect,
+  useRef,
+  useState
+} from 'react';
 import { useRecoilState, useSetRecoilState } from 'recoil';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -9,11 +15,14 @@ import {
   useChatData,
   useChatInteract
 } from '@chainlit/react-client';
+import type { IMode, IModeOption } from '@chainlit/react-client';
+import { modesState } from '@chainlit/react-client';
 
 import { Settings } from '@/components/icons/Settings';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from 'components/i18n/Translator';
 
+import { useQuery } from '@/hooks/query';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 import { chatSettingsOpenState } from '@/state/project';
@@ -28,6 +37,7 @@ import CommandButtons from './CommandButtons';
 import CommandButton from './CommandPopoverButton';
 import Input, { InputMethods } from './Input';
 import McpButton from './Mcp';
+import ModePicker from './ModePicker';
 import SubmitButton from './SubmitButton';
 import UploadButton from './UploadButton';
 import VoiceButton from './VoiceButton';
@@ -62,6 +72,43 @@ export default function MessageComposer({
 
   const isMobile = useIsMobile();
 
+  // Get/set available modes from state - selections are tracked via the 'default' flag on options
+  const [modes, setModes] = useRecoilState(modesState);
+
+  const handleModeSelect = useCallback(
+    (modeId: string, optionId: string) => {
+      setModes((prevModes) =>
+        prevModes.map((mode) => {
+          if (mode.id !== modeId) return mode;
+          return {
+            ...mode,
+            options: mode.options.map((opt: IModeOption) => ({
+              ...opt,
+              default: opt.id === optionId
+            }))
+          };
+        })
+      );
+    },
+    [setModes]
+  );
+
+  // Helper to get selected option for a mode (the one with default=true, or first option)
+  const getSelectedOptionId = useCallback((mode: IMode): string | undefined => {
+    const defaultOpt = mode.options.find((opt) => opt.default);
+    return defaultOpt?.id || mode.options[0]?.id;
+  }, []);
+
+  let promptValue = '';
+  try {
+    const query = useQuery();
+    promptValue = query.get('prompt') || '';
+  } catch {
+    console.warn('Could not parse query parameters');
+  }
+
+  const [promptUsed, setPromptUsed] = useState(false);
+
   const onPaste = useCallback(
     (event: ClipboardEvent) => {
       if (event.clipboardData && event.clipboardData.items) {
@@ -87,9 +134,19 @@ export default function MessageComposer({
       attachments?: IAttachment[],
       selectedCommand?: string
     ) => {
+      // Build modes dict: only include modes that have selections
+      const modesDict: Record<string, string> = {};
+      modes.forEach((mode) => {
+        const selectedId = getSelectedOptionId(mode);
+        if (selectedId) {
+          modesDict[mode.id] = selectedId;
+        }
+      });
+
       const message: IStep = {
         threadId: '',
         command: selectedCommand,
+        modes: Object.keys(modesDict).length > 0 ? modesDict : undefined,
         id: uuidv4(),
         name: user?.identifier || 'User',
         type: 'user_message',
@@ -107,7 +164,7 @@ export default function MessageComposer({
       }
       sendMessage(message, fileReferences);
     },
-    [user, sendMessage, autoScrollRef]
+    [user, sendMessage, autoScrollRef, modes, getSelectedOptionId]
   );
 
   const onReply = useCallback(
@@ -158,6 +215,20 @@ export default function MessageComposer({
     onReply
   ]);
 
+  useEffect(() => {
+    if (inputRef.current && promptValue && !promptUsed) {
+      const prompt = promptValue;
+      if (prompt) {
+        if (prompt.length > 1000) {
+          inputRef.current?.setValueExtern(prompt.slice(0, 1000));
+        } else {
+          inputRef.current?.setValueExtern(prompt);
+        }
+        setPromptUsed(true);
+      }
+    }
+  }, [promptValue, promptUsed]);
+
   return (
     <div
       id="message-composer"
@@ -201,6 +272,15 @@ export default function MessageComposer({
             </Button>
           )}
           <McpButton disabled={disabled} />
+          {modes.map((mode) => (
+            <ModePicker
+              key={mode.id}
+              mode={mode}
+              disabled={disabled}
+              selectedOptionId={getSelectedOptionId(mode)}
+              onOptionSelect={handleModeSelect}
+            />
+          ))}
           <CommandButton
             disabled={disabled}
             selectedCommandId={selectedCommand?.id}

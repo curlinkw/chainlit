@@ -4,6 +4,78 @@ All notable changes to Chainlit will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [2.9.4] - 2025-12-24
+
+### Added
+- Add an icon for shared thread
+- New option to allow disabling auto scroll of assistant messages
+- Add modes: you may allow users to select an LLM model, a mode (for example, planning), allow to enable reasoning etc.
+  - Breaking change: you need to run `ALTER TABLE steps ADD COLUMN IF NOT EXISTS modes JSONB;` for migration
+
+### Fixed
+- Fix tiny avatar for long messages
+- Security vulnerability in Chainlit: added missed sanitization to custom elements update endpoint
+
+### Changed
+- Bumped watchfiles version
+
+## [2.9.3] - 2025-12-04
+
+### Added
+- Add tests for oauth providers and messages
+- Merge metadata in chainlit data layer
+- Add native video support in markdown rendering
+- Optimize chat message rendering
+- Add language configuration option to config.toml
+- Upgrade langchain imports for v1 compatibility
+- Improve icon name formatting issues
+
+### Fixed
+- Fixed page blinking issue with header_auth
+- Set environ when restoring websocket session
+- Move hello.py to avoid import issues
+- Fix issue showing thread sharing when disabled
+- Disable Chainlit from setting logging globally
+
+## [2.9.2] - 2025-11-22
+
+### Added
+- Add tests for socket, chat context, cache, translations & oauth providers
+
+### Fixed
+- Fix copilot breaking change introduced in 2.8.5
+
+## [2.9.1] - 2025-11-20
+
+### Added
+- Add support for tabs in chat settings
+- Support markdown in watermark
+- Add italian translation to translations folder
+- Add query param prefill for chat
+- Add tests for utils, markdown, sidebar, chat settings, mcp, input widget, langchain, elements, steps, and actions
+
+
+## [2.9.0] - 2025-11-06
+
+### Added
+- Add better support for Multi-Agent implementations
+  - Nested steps are now step.input -> child step -> step.output
+  - Improved formatting and styling of Tasklist
+
+
+## [2.8.5] - 2025-11-07
+
+### Added
+- Add display_name to ChatProfile
+- Add slack reaction event callback
+- Add raw response from OAuth providers
+
+### Fixed
+- Security vulnerability in Chainlint: added missed ACL check for session initialization
+
+### Changed
+- Remove FastAPI version restrictions
+
 ## [2.8.4] - 2025-10-29
 
 ### Added

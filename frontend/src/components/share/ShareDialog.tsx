@@ -170,7 +170,7 @@ export function ShareDialog({
         }
       }}
     >
-      <DialogContent className="sm:max-w-lg overflow-hidden">
+      <DialogContent className="flex flex-col sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
             <Translator path="threadHistory.thread.actions.share.title" />
