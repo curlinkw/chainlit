@@ -57,6 +57,14 @@ def get_data_layer():
                 azure_storage_key = os.getenv("APP_AZURE_STORAGE_ACCESS_KEY")
                 is_using_azure = bool(azure_storage_account and azure_storage_key)
 
+                # MinIO Storage
+                minio_access_key = os.getenv("APP_MINIO_ACCESS_KEY")
+                minio_secret_key = os.getenv("APP_MINIO_SECRET_KEY")
+                minio_endpoint = os.getenv("APP_MINIO_ENDPOINT")
+                is_using_minio = bool(
+                    minio_access_key and minio_secret_key and minio_endpoint
+                )
+
                 storage_client = None
 
                 if sum([is_using_s3, is_using_gcs, is_using_azure]) > 1:
@@ -91,6 +99,16 @@ def get_data_layer():
                         container_name=bucket_name,
                         storage_account=azure_storage_account,
                         storage_key=azure_storage_key,
+                    )
+                elif is_using_minio:
+                    from chainlit.data.storage_clients.minio import MinIOStorageClient
+
+                    storage_client = MinIOStorageClient(
+                        bucket=bucket_name,
+                        endpoint=minio_endpoint,
+                        access_key=minio_access_key,
+                        secret_key=minio_secret_key,
+                        secure=False,
                     )
 
                 _data_layer = ChainlitDataLayer(
