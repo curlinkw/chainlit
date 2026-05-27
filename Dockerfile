@@ -5,7 +5,7 @@ WORKDIR /workspace/chainlit
 COPY . /workspace/chainlit
 
 RUN apt-get update -y && \
-  apt-get install -y --no-install-recommends wget libpq-dev libatomic1 && \
+  apt-get install -y --no-install-recommends wget libpq-dev libatomic1 postgresql postgresql-contrib && \
   rm -rf /var/lib/apt/lists/* && \
   wget -qO- https://deb.nodesource.com/setup_22.x | bash - && \
   apt-get install -y nodejs && \
