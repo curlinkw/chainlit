@@ -8,8 +8,8 @@ on:
         required: false
         default: false
         type: boolean
-  release:
-    types: [published]
+#  release:
+#    types: [published]
 
 permissions: read-all
 

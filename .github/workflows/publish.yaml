@@ -38,7 +38,7 @@ jobs:
     needs: [ci]
     env:
       name: ${{ inputs.use_testpypi && 'testpypi' || 'pypi' }}
-      url: ${{ inputs.use_testpypi && 'https://test.pypi.org/project/chainlit' || 'https://pypi.org/project/chainlit' }}
+      url: ${{ inputs.use_testpypi && 'https://test.pypi.org/project/puku-chainlit' || 'https://pypi.org/project/puku-chainlit' }}
       BACKEND_DIR: ./backend
     permissions:
       contents: read
@@ -59,9 +59,9 @@ jobs:
       - name: Check frontend and copilot folder included
         run: |
           pip install wheel
-          python -m wheel unpack dist/chainlit-*.whl -d unpacked
-          ls unpacked/chainlit-*/chainlit/frontend/dist
-          ls unpacked/chainlit-*/chainlit/copilot/dist
+          python -m wheel unpack dist/puku_chainlit-*.whl -d unpacked
+          ls unpacked/puku_chainlit-*/chainlit/frontend/dist
+          ls unpacked/puku_chainlit-*/chainlit/copilot/dist
 
       - name: Publish package distributions to TestPyPI
         if: inputs.use_testpypi
