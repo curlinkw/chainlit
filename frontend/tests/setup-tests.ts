@@ -5,33 +5,76 @@ import { afterEach, expect, vi } from 'vitest';
 expect.extend(matchers);
 
 /**
- * Node >= 23 ships a global localStorage/sessionStorage getter that returns
- * undefined unless the process was started with --localstorage-file.
+ * Node 25+ defines its own localStorage / sessionStorage getters on
+ * globalThis that return undefined unless --localstorage-file is passed.
  *
- * Vitest's jsdom environment only copies jsdom window keys that are still
- * free on the test global. Because Node already defines localStorage,
- * jsdom's working Storage is shadowed and every test sees undefined.
+ * Vitest's jsdom environment only copies window keys that are not already
+ * present on the test global. Because Node already defines these names,
+ * jsdom's working Storage is shadowed and every storage-touching test fails
+ * with "Cannot read properties of undefined".
  *
- * Rebind jsdom's real Storage whenever the test global disagrees with the
- * jsdom window. This is a no-op on Node <= 24, where the global is not
- * shadowed and both already point at the same object.
+ * Fix: re-expose jsdom's real Storage objects on globalThis whenever the
+ * current global is unusable. On Node <= 24 this is a no-op.
  *
- * This is the same pattern used in upstream fixes for this issue.
+ * This is the pattern used in upstream fixes for the same breakage:
+ * - https://github.com/AlexsJones/llmfit/pull/1222
+ * - https://github.com/omnigent-ai/omnigent/pull/8299
  */
-const jsdomHost: { jsdom?: { window?: Record<string, unknown> } } = globalThis;
-const jsdomWindow = jsdomHost.jsdom?.window;
+function restoreJsdomStorage(name: 'localStorage' | 'sessionStorage') {
+  const current = (globalThis as Record<string, unknown>)[name] as
+    | Partial<Storage>
+    | undefined;
 
-if (jsdomWindow) {
-  for (const key of ['localStorage', 'sessionStorage'] as const) {
-    const testGlobal: Record<string, unknown> = globalThis;
-    if (testGlobal[key] !== jsdomWindow[key]) {
-      Object.defineProperty(globalThis, key, {
-        get: () => jsdomWindow[key],
-        configurable: true
-      });
-    }
+  // If a usable Storage is already present, do nothing.
+  if (current && typeof current.getItem === 'function') return;
+
+  // Prefer jsdom's real Storage so that StorageEvent, prototype spies and
+  // other jsdom features keep working.
+  const jsdomWindow = (globalThis as { jsdom?: { window?: Window } }).jsdom
+    ?.window;
+
+  if (jsdomWindow && jsdomWindow[name]) {
+    Object.defineProperty(globalThis, name, {
+      value: jsdomWindow[name],
+      configurable: true,
+      writable: true
+    });
+    return;
   }
+
+  // Fallback: minimal in-memory Storage. This is only reached in a pure Node
+  // environment where jsdom is not loaded at all.
+  const map = new Map<string, string>();
+  const storage: Storage = {
+    get length() {
+      return map.size;
+    },
+    clear() {
+      map.clear();
+    },
+    getItem(key: string) {
+      return map.has(key) ? map.get(key)! : null;
+    },
+    key(index: number) {
+      return Array.from(map.keys())[index] ?? null;
+    },
+    removeItem(key: string) {
+      map.delete(key);
+    },
+    setItem(key: string, value: string) {
+      map.set(key, String(value));
+    }
+  };
+
+  Object.defineProperty(globalThis, name, {
+    value: storage,
+    configurable: true,
+    writable: true
+  });
 }
+
+restoreJsdomStorage('localStorage');
+restoreJsdomStorage('sessionStorage');
 
 // Mock URL.createObjectURL
 global.URL.createObjectURL = vi.fn();
@@ -78,7 +121,6 @@ if (typeof globalThis.DOMMatrix === 'undefined') {
 
 afterEach(() => {
   cleanup();
-  // Storage is process-global; clear it to prevent cross-test leakage.
   localStorage.clear();
   sessionStorage.clear();
 });

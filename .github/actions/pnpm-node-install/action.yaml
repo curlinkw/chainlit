@@ -5,15 +5,12 @@ inputs:
   node-version:
     description: >-
       Explicit Node.js version. Leave unset to use node-version-file.
-      Do not use 'lts/*'; it silently floats and was the root cause of
-      the localStorage regression.
+      Do not use 'lts/*'; it silently floats and causes runtime drift.
     required: false
     # No default. An empty string can conflict with node-version-file.
   node-version-file:
     description: >-
-      File that pins the Node.js version. The repository must contain this
-      file (a .nvmrc is committed at the root), or the caller must pass
-      node-version instead.
+      File that pins the Node.js version, relative to the repository root.
     required: false
     default: '.nvmrc'
 
@@ -31,14 +28,21 @@ runs:
       # v6.3.0 = 53b83947a5a98c8d113130e565377fae1a50d02f
       uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f
       with:
-        # Omit node-version entirely when using node-version-file.
-        # setup-node uses node-version over the file if both are set.
+        # If node-version is non-empty it takes precedence over the file.
         node-version: ${{ inputs.node-version }}
-        node-version-file: ${{ inputs.node-version-file }}
+        # Anchor to the checkout root explicitly.
+        # setup-node joins a relative input onto GITHUB_WORKSPACE; in a
+        # composite action that join can land on the wrong root. Using an
+        # absolute path built from github.workspace removes the ambiguity.
+        node-version-file: ${{ github.workspace }}/${{ inputs.node-version-file }}
         registry-url: 'https://registry.npmjs.org'
         cache: 'pnpm'
         cache-dependency-path: '**/pnpm-lock.yaml'
 
     - name: Install JS dependencies
       shell: bash
+      # --frozen-lockfile is the CI contract: it refuses to rewrite the
+      # lockfile and fails fast on drift. pnpm auto-detects CI and switches
+      # to frozen mode, but passing it explicitly is the documented best
+      # practice and makes the intent visible.
       run: pnpm install --frozen-lockfile --prefer-offline
