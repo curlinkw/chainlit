@@ -5,59 +5,33 @@ import { afterEach, expect, vi } from 'vitest';
 expect.extend(matchers);
 
 /**
- * Node >= 22.4 ships a native Web Storage getter on `globalThis`.
- * Unless the process is started with `--localstorage-file`, that getter
- * returns `undefined`, and Vitest's jsdom environment only copies jsdom's
- * window keys onto the test global when the key is still free.
- * Because Node has already defined `localStorage`, jsdom's working Storage
- * is never installed — every test sees `undefined`.
+ * Node >= 23 ships a global localStorage/sessionStorage getter that returns
+ * undefined unless the process was started with --localstorage-file.
  *
- * Install a minimal, correct `Storage` whenever the existing global is not
- * usable. This is idempotent: if jsdom's real Storage is present (older
- * Node, or a future Vitest that fixes the shadowing), the guard returns
- * early and nothing changes.
+ * Vitest's jsdom environment only copies jsdom window keys that are still
+ * free on the test global. Because Node already defines localStorage,
+ * jsdom's working Storage is shadowed and every test sees undefined.
+ *
+ * Rebind jsdom's real Storage whenever the test global disagrees with the
+ * jsdom window. This is a no-op on Node <= 24, where the global is not
+ * shadowed and both already point at the same object.
+ *
+ * This is the same pattern used in upstream fixes for this issue.
  */
-function installStorageStub(name: 'localStorage' | 'sessionStorage') {
-  const existing = (globalThis as Record<string, unknown>)[name] as
-    | Partial<Storage>
-    | undefined;
+const jsdomHost: { jsdom?: { window?: Record<string, unknown> } } = globalThis;
+const jsdomWindow = jsdomHost.jsdom?.window;
 
-  // A usable Storage exposes at least getItem/setItem/removeItem as functions.
-  if (existing && typeof existing.getItem === 'function') return;
-
-  const map = new Map<string, string>();
-  const storage: Storage = {
-    get length() {
-      return map.size;
-    },
-    clear() {
-      map.clear();
-    },
-    getItem(key: string) {
-      return map.has(key) ? map.get(key)! : null;
-    },
-    key(index: number) {
-      return Array.from(map.keys())[index] ?? null;
-    },
-    removeItem(key: string) {
-      map.delete(key);
-    },
-    setItem(key: string, value: string) {
-      map.set(key, String(value));
+if (jsdomWindow) {
+  for (const key of ['localStorage', 'sessionStorage'] as const) {
+    const testGlobal: Record<string, unknown> = globalThis;
+    if (testGlobal[key] !== jsdomWindow[key]) {
+      Object.defineProperty(globalThis, key, {
+        get: () => jsdomWindow[key],
+        configurable: true
+      });
     }
-  };
-
-  // `defineProperty` (not assignment) reliably replaces Node's native getter.
-  // `configurable: true` lets later tooling (or another setup file) rebind it.
-  Object.defineProperty(globalThis, name, {
-    value: storage,
-    configurable: true,
-    writable: true
-  });
+  }
 }
-
-installStorageStub('localStorage');
-installStorageStub('sessionStorage');
 
 // Mock URL.createObjectURL
 global.URL.createObjectURL = vi.fn();
@@ -104,8 +78,7 @@ if (typeof globalThis.DOMMatrix === 'undefined') {
 
 afterEach(() => {
   cleanup();
-  // Storage is process-global and survives across tests in a file.
-  // Clear it so tests do not leak state into each other.
+  // Storage is process-global; clear it to prevent cross-test leakage.
   localStorage.clear();
   sessionStorage.clear();
 });
