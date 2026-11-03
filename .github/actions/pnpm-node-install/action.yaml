@@ -25,15 +25,14 @@ runs:
         # pnpm version is read from packageManager in package.json.
 
     - name: Use Node.js
-      # v6.3.0 = 53b83947a5a98c8d113130e565377fae1a50d02f
-      uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f
+      # v7.1.0 = 949feb2413d6458794dcd2491c4babbbce0c15c1
+      # (v7.1.0 adds support for absolute paths in node-version-file.)
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
       with:
         # If node-version is non-empty it takes precedence over the file.
         node-version: ${{ inputs.node-version }}
-        # Anchor to the checkout root explicitly.
-        # setup-node joins a relative input onto GITHUB_WORKSPACE; in a
-        # composite action that join can land on the wrong root. Using an
-        # absolute path built from github.workspace removes the ambiguity.
+        # Absolute path is safe on v7.1.0+; it resolves correctly even
+        # inside a composite action.
         node-version-file: ${{ github.workspace }}/${{ inputs.node-version-file }}
         registry-url: 'https://registry.npmjs.org'
         cache: 'pnpm'
@@ -42,7 +41,5 @@ runs:
     - name: Install JS dependencies
       shell: bash
       # --frozen-lockfile is the CI contract: it refuses to rewrite the
-      # lockfile and fails fast on drift. pnpm auto-detects CI and switches
-      # to frozen mode, but passing it explicitly is the documented best
-      # practice and makes the intent visible.
+      # lockfile and fails fast on drift.
       run: pnpm install --frozen-lockfile --prefer-offline
