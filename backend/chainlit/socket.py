@@ -288,14 +288,31 @@ async def disconnect(sid):
 
 @sio.on("stop")  # pyright: ignore [reportOptionalCall]
 async def stop(sid):
+    """Signal a cancellation request to the application.
+
+    The task is **not** cancelled here. Cancellation is delegated to
+    the application's `on_stop` hook: the hook asserts an intent in
+    its coordination store, the running agent detects the intent at
+    its next abort checkpoint, and it produces a cancellation terminal
+    event. The application's `on_message` handler renders that event,
+    then `process_message`'s `finally` fires `task_end()` and the
+    frontend's loading state clears.
+
+    The guard `not session.current_task.done()` prevents setting an
+    intent when the task has already completed. Without it, a stop
+    clicked in the same frame as the task finishing would leave a
+    stale intent in the coordination store, and the user's *next*
+    message would be spuriously cancelled (until the intent's TTL
+    clears it).
+    """
     if session := WebsocketSession.get(sid):
         init_ws_context(session)
-        await Message(content="Task manually stopped.").send()
 
-        if session.current_task:
-            session.current_task.cancel()
-
-        if config.code.on_stop:
+        if (
+            session.current_task is not None
+            and not session.current_task.done()
+            and config.code.on_stop is not None
+        ):
             await config.code.on_stop()
 
 
