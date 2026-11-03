@@ -8,13 +8,9 @@ on:
         type: number
         default: 5
 
-# Least privilege: checkout is the only GitHub resource this workflow reads.
-# Cache and artifact operations use the per-job runtime token, not GITHUB_TOKEN.
 permissions:
   contents: read
 
-# Cancel superseded PR runs: saves runner minutes and avoids dangling
-# Cypress Cloud recordings from stale commits.
 concurrency:
   group: e2e-${{ github.workflow }}-${{ github.ref }}-${{ inputs.e2e_parallel_shards }}
   cancel-in-progress: true
@@ -22,7 +18,6 @@ concurrency:
 jobs:
   prepare:
     name: Validate inputs and compute shard matrix
-    # Pin the OS image: 'ubuntu-latest' floats and can change jq/bash behaviour.
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
@@ -48,32 +43,29 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
-      # Do not cancel sibling shards when one fails. The original failure was
-      # masked because windows-latest-5 failed and the other four Windows
-      # shards were reported as "cancelled" rather than independently tested.
+      # Do not cancel sibling shards when one fails. The original Chainlit
+      # failure masked four Windows shards as "cancelled" because the first
+      # shard failed; every shard must report its own status.
       fail-fast: false
       matrix:
-        # Pin OS images. 'windows-latest' migrated to windows-2025 and changed
-        # cache hit/miss behaviour, which exposed the missing-binary bug.
+        # Pin OS images. 'windows-latest' migrating to windows-2025 changed
+        # cache behaviour and exposed the latent missing-binary bug.
         os: [ubuntu-24.04, windows-2025]
         containers: ${{ fromJSON(needs.prepare.outputs.indexes) }}
     name: ${{ matrix.os }}-${{ matrix.containers }}
     env:
       BACKEND_DIR: ./backend
-      # Single cache root for both OSes; Cypress's default paths differ.
       CYPRESS_CACHE_FOLDER: ${{ github.workspace }}/.cypress-cache
     steps:
-      - uses: actions/checkout@v6
+      # actions/checkout v6.0.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
-          # Do not leave GITHUB_TOKEN in .git/config for a read-only job.
           persist-credentials: false
 
-      # Restore and save are split deliberately. actions/cache only saves in
-      # its post-step on job success, so a test failure would discard the
-      # freshly downloaded binary and force a re-download next run.
+      # actions/cache/restore v5.0.5
       - name: Restore Cypress binary cache
         id: cypress-cache
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae
         with:
           path: .cypress-cache
           key: cypress-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
@@ -81,26 +73,35 @@ jobs:
       - uses: ./.github/actions/pnpm-node-install
         name: Install Node, pnpm and dependencies.
 
-      # pnpm may satisfy the cypress package from its content-addressable store
-      # and skip the postinstall that downloads the binary. This step is
-      # idempotent: a no-op on a cache hit, a repair on a cache miss.
-      - name: Ensure Cypress binary is installed
-        run: pnpm exec cypress install
+      # Guarantee the target directory exists on a cache miss. Cypress will
+      # not create a missing CYPRESS_CACHE_FOLDER automatically.
+      - name: Ensure Cypress cache folder exists
+        run: mkdir -p .cypress-cache
         shell: bash
 
-      # Fail before the tests start if the binary is unusable, instead of
-      # producing a misleading "test failed" status.
+      # Explicit install is the definitive fix. Package managers (pnpm,
+      # Yarn Berry, npm 12+) may skip a dependency's postinstall by default,
+      # so the binary is never downloaded on a cold cache.
+      # npx is used for consistency across package managers and to avoid
+      # ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL in pnpm workspaces where cypress
+      # is a child-package dependency.
+      - name: Install Cypress binary
+        run: npx --no-install cypress install
+        shell: bash
+
+      # Fail before the tests start if the binary is still unusable,
+      # instead of producing a misleading "test failed" status.
       - name: Verify Cypress binary
-        run: pnpm exec cypress verify
+        run: npx --no-install cypress verify
         shell: bash
 
+      # actions/cache/save v5.0.5
       - name: Save Cypress binary cache
         if: steps.cypress-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae
         with:
           path: .cypress-cache
           key: ${{ steps.cypress-cache.outputs.cache-primary-key }}
-        # Parallel shards race for the same key; losing the race is harmless.
         continue-on-error: true
 
       - uses: ./.github/actions/uv-python-install
@@ -117,8 +118,9 @@ jobs:
         run: pnpm test:e2e
         shell: bash
 
+      # actions/upload-artifact v7.0.1
       - name: Upload screenshots
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always() && hashFiles('cypress/screenshots/**') != ''
         with:
           name: cypress-screenshots-${{ matrix.os }}-${{ matrix.containers }}
