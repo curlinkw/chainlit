@@ -1,26 +1,49 @@
-name: Install Node, pnpm and dependencies.
-description: Install Node, pnpm and dependencies using cache.
+name: Install Node, pnpm and dependencies
+description: Install a pinned Node.js + pnpm toolchain and dependencies with caching.
 
 inputs:
   node-version:
-    description: Node.js version
-    required: true
-    default: 'lts/*'
+    description: >-
+      Node.js major version to install. Prefer leaving this unset and using a
+      version file (.nvmrc / .node-version) so CI matches local development.
+    required: false
+    default: ''
+  node-version-file:
+    description: File that pins the Node.js version (e.g. .nvmrc, .node-version).
+    required: false
+    default: '.nvmrc'
 
 runs:
   using: composite
   steps:
-    - uses: pnpm/action-setup@v5.0.0
-      name: Install pnpm
+    - name: Install pnpm
+      # Pin to a full commit SHA for supply-chain security.
+      # v5.0.0 = a7487c7e89a18df4991f7f222e4898a00d66ddda
+      uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda
       with:
         run_install: false
+        # Do not hard-code the pnpm version here if packageManager is set in
+        # package.json; this action reads it automatically and keeps CI and
+        # local dev on the same version.
+
     - name: Use Node.js
-      uses: actions/setup-node@v6.3.0
+      # actions/setup-node v6.3.0
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
       with:
+        # Never use `lts/*`: it silently moves the runtime under you and was
+        # the root cause of the localStorage regression.
         node-version: ${{ inputs.node-version }}
+        node-version-file: ${{ inputs.node-version-file }}
         registry-url: 'https://registry.npmjs.org'
         cache: 'pnpm'
         cache-dependency-path: '**/pnpm-lock.yaml'
+        # Cache is keyed by the lockfile hash automatically.
+        # setup-node does not cache pnpm by default; cache must be explicit.
+
     - name: Install JS dependencies
-      run: pnpm install
       shell: bash
+      # --frozen-lockfile guarantees CI uses exactly the lockfile and fails
+      # if package.json and the lockfile disagree.
+      # --prefer-offline shortens installs on cache hits without hiding
+      # missing packages.
+      run: pnpm install --frozen-lockfile --prefer-offline

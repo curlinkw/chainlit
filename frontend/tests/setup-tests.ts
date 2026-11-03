@@ -4,6 +4,61 @@ import { afterEach, expect, vi } from 'vitest';
 
 expect.extend(matchers);
 
+/**
+ * Node >= 22.4 ships a native Web Storage getter on `globalThis`.
+ * Unless the process is started with `--localstorage-file`, that getter
+ * returns `undefined`, and Vitest's jsdom environment only copies jsdom's
+ * window keys onto the test global when the key is still free.
+ * Because Node has already defined `localStorage`, jsdom's working Storage
+ * is never installed — every test sees `undefined`.
+ *
+ * Install a minimal, correct `Storage` whenever the existing global is not
+ * usable. This is idempotent: if jsdom's real Storage is present (older
+ * Node, or a future Vitest that fixes the shadowing), the guard returns
+ * early and nothing changes.
+ */
+function installStorageStub(name: 'localStorage' | 'sessionStorage') {
+  const existing = (globalThis as Record<string, unknown>)[name] as
+    | Partial<Storage>
+    | undefined;
+
+  // A usable Storage exposes at least getItem/setItem/removeItem as functions.
+  if (existing && typeof existing.getItem === 'function') return;
+
+  const map = new Map<string, string>();
+  const storage: Storage = {
+    get length() {
+      return map.size;
+    },
+    clear() {
+      map.clear();
+    },
+    getItem(key: string) {
+      return map.has(key) ? map.get(key)! : null;
+    },
+    key(index: number) {
+      return Array.from(map.keys())[index] ?? null;
+    },
+    removeItem(key: string) {
+      map.delete(key);
+    },
+    setItem(key: string, value: string) {
+      map.set(key, String(value));
+    }
+  };
+
+  // `defineProperty` (not assignment) reliably replaces Node's native getter.
+  // `configurable: true` lets later tooling (or another setup file) rebind it.
+  Object.defineProperty(globalThis, name, {
+    value: storage,
+    configurable: true,
+    writable: true
+  });
+}
+
+installStorageStub('localStorage');
+installStorageStub('sessionStorage');
+
 // Mock URL.createObjectURL
 global.URL.createObjectURL = vi.fn();
 
@@ -49,4 +104,8 @@ if (typeof globalThis.DOMMatrix === 'undefined') {
 
 afterEach(() => {
   cleanup();
+  // Storage is process-global and survives across tests in a file.
+  // Clear it so tests do not leak state into each other.
+  localStorage.clear();
+  sessionStorage.clear();
 });
