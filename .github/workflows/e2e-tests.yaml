@@ -8,25 +8,37 @@ on:
         type: number
         default: 5
 
-permissions: read-all
+# Least privilege: checkout is the only GitHub resource this workflow reads.
+# Cache and artifact operations use the per-job runtime token, not GITHUB_TOKEN.
+permissions:
+  contents: read
+
+# Cancel superseded PR runs: saves runner minutes and avoids dangling
+# Cypress Cloud recordings from stale commits.
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.ref }}-${{ inputs.e2e_parallel_shards }}
+  cancel-in-progress: true
 
 jobs:
   prepare:
     name: Validate inputs and compute shard matrix
-    runs-on: ubuntu-slim
+    # Pin the OS image: 'ubuntu-latest' floats and can change jq/bash behaviour.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     outputs:
       indexes: ${{ steps.shard-indexes.outputs.indexes }}
     steps:
       - name: Validate e2e_parallel_shards
+        shell: bash
         run: |
           n="${{ inputs.e2e_parallel_shards }}"
           if ! [[ "$n" =~ ^[0-9]+$ ]] || [[ "$n" -lt 1 ]]; then
-            echo "❌ Error: e2e_parallel_shards must be at least 1, got: $n"
+            echo "::error::e2e_parallel_shards must be at least 1, got: $n"
             exit 1
           fi
-          echo "✅ Validation passed"
       - id: shard-indexes
         name: Compute shard indexes
+        shell: bash
         run: |
           json=$(jq -nc --argjson n "${{ inputs.e2e_parallel_shards }}" '[range(1; $n + 1)]')
           echo "indexes=$json" >> "$GITHUB_OUTPUT"
@@ -34,32 +46,69 @@ jobs:
   e2e-tests:
     needs: prepare
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
+      # Do not cancel sibling shards when one fails. The original failure was
+      # masked because windows-latest-5 failed and the other four Windows
+      # shards were reported as "cancelled" rather than independently tested.
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        # Pin OS images. 'windows-latest' migrated to windows-2025 and changed
+        # cache hit/miss behaviour, which exposed the missing-binary bug.
+        os: [ubuntu-24.04, windows-2025]
         containers: ${{ fromJSON(needs.prepare.outputs.indexes) }}
     name: ${{ matrix.os }}-${{ matrix.containers }}
     env:
       BACKEND_DIR: ./backend
-      # Single path for actions/cache on Linux + Windows (default Cypress dirs differ by OS).
+      # Single cache root for both OSes; Cypress's default paths differ.
       CYPRESS_CACHE_FOLDER: ${{ github.workspace }}/.cypress-cache
     steps:
       - uses: actions/checkout@v6
-      - name: Cache Cypress binary
-        uses: actions/cache@v5
+        with:
+          # Do not leave GITHUB_TOKEN in .git/config for a read-only job.
+          persist-credentials: false
+
+      # Restore and save are split deliberately. actions/cache only saves in
+      # its post-step on job success, so a test failure would discard the
+      # freshly downloaded binary and force a re-download next run.
+      - name: Restore Cypress binary cache
+        id: cypress-cache
+        uses: actions/cache/restore@v5
         with:
           path: .cypress-cache
           key: cypress-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
       - uses: ./.github/actions/pnpm-node-install
         name: Install Node, pnpm and dependencies.
+
+      # pnpm may satisfy the cypress package from its content-addressable store
+      # and skip the postinstall that downloads the binary. This step is
+      # idempotent: a no-op on a cache hit, a repair on a cache miss.
       - name: Ensure Cypress binary is installed
         run: pnpm exec cypress install
         shell: bash
+
+      # Fail before the tests start if the binary is unusable, instead of
+      # producing a misleading "test failed" status.
+      - name: Verify Cypress binary
+        run: pnpm exec cypress verify
+        shell: bash
+
+      - name: Save Cypress binary cache
+        if: steps.cypress-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: .cypress-cache
+          key: ${{ steps.cypress-cache.outputs.cache-primary-key }}
+        # Parallel shards race for the same key; losing the race is harmless.
+        continue-on-error: true
+
       - uses: ./.github/actions/uv-python-install
         name: Install Python, uv and Python & pnpm (uv does it automatically) dependencies
         with:
           working-directory: ${{ env.BACKEND_DIR }}
           uv-args: --extra tests
+
       - name: Run tests
         env:
           CYPRESS_RECORD_KEY: ${{ secrets.CYPRESS_RECORD_KEY }}
@@ -67,9 +116,12 @@ jobs:
           SPLIT_INDEX1: ${{ matrix.containers }}
         run: pnpm test:e2e
         shell: bash
+
       - name: Upload screenshots
         uses: actions/upload-artifact@v7
         if: always() && hashFiles('cypress/screenshots/**') != ''
         with:
           name: cypress-screenshots-${{ matrix.os }}-${{ matrix.containers }}
           path: cypress/screenshots
+          if-no-files-found: ignore
+          retention-days: 7
