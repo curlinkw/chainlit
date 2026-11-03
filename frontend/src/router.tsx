@@ -8,7 +8,13 @@ import Home from 'pages/Home';
 import Login from 'pages/Login';
 import Thread from 'pages/Thread';
 
-export const router = createBrowserRouter(
+// Derive the router's type from the function that creates it.
+// This gives TypeScript a nameable type without importing from the
+// transitive `@remix-run/router` package, which pnpm does not expose
+// to this workspace package.
+type AppRouter = ReturnType<typeof createBrowserRouter>;
+
+export const router: AppRouter = createBrowserRouter(
   [
     {
       path: '/',

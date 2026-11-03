@@ -1,10 +1,22 @@
 {
+  "name": "chainlit",
+  "private": true,
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Chainlit/chainlit.git"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": "9.15.9"
+  },
+  "packageManager": "pnpm@9.15.9",
   "devDependencies": {
     "@eslint/compat": "^2.0.3",
     "@eslint/js": "^10.0.0",
     "@trivago/prettier-plugin-sort-imports": "^4.3.0",
-    "@types/react": "^18.2.15",
-    "@types/react-dom": "^18.2.7",
+    "@types/react": "^18.3.27",
+    "@types/react-dom": "^18.3.7",
     "cypress": "^14.5.3",
     "cypress-plugin-steps": "1.2.1",
     "cypress-split": "^1.24.31",
@@ -40,6 +52,8 @@
   },
   "pnpm": {
     "overrides": {
+      "@types/react": "18.3.27",
+      "@types/react-dom": "18.3.7",
       "braces@<3.0.3": ">=3.0.3",
       "micromatch@<4.0.8": ">=4.0.8",
       "postcss@>=8.0.0 <8.5.23": ">=8.5.23 <9.0.0",
@@ -52,7 +66,11 @@
       "qs@>=6.0.0 <6.15.2": ">=6.15.2 <7.0.0",
       "tmp@>=0.2.0 <0.2.7": ">=0.2.7 <0.3.0",
       "yaml@>=2.0.0 <2.8.3": ">=2.8.3 <3.0.0"
-    }
-  },
-  "packageManager": "pnpm@9.15.9"
+    },
+    "onlyBuiltDependencies": [
+      "@swc/core",
+      "cypress",
+      "esbuild"
+    ]
+  }
 }
