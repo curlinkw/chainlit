@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       e2e_parallel_shards:
-        description: Number of parallel E2E shards per OS.
+        description: Number of parallel E2E shards.
         type: number
         default: 5
 
@@ -40,21 +40,18 @@ jobs:
 
   e2e-tests:
     needs: prepare
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
-      # Do not cancel sibling shards when one fails. The original Chainlit
-      # failure masked four Windows shards as "cancelled" because the first
-      # shard failed; every shard must report its own status.
+      # Every shard must report its own status. With fail-fast enabled, the
+      # first failure cancels the remaining shards and hides their result.
       fail-fast: false
       matrix:
-        # Pin OS images. 'windows-latest' migrating to windows-2025 changed
-        # cache behaviour and exposed the latent missing-binary bug.
-        os: [ubuntu-24.04, windows-2025]
         containers: ${{ fromJSON(needs.prepare.outputs.indexes) }}
-    name: ${{ matrix.os }}-${{ matrix.containers }}
+    name: e2e-${{ matrix.containers }}
     env:
       BACKEND_DIR: ./backend
+      # Keep the binary outside node_modules so it can be cached separately.
       CYPRESS_CACHE_FOLDER: ${{ github.workspace }}/.cypress-cache
     steps:
       # actions/checkout v6.0.2
@@ -63,6 +60,9 @@ jobs:
           persist-credentials: false
 
       # actions/cache/restore v5.0.5
+      # Split restore/save: actions/cache only saves in its post-step on job
+      # success, so a failing test run would discard the freshly downloaded
+      # binary and force a re-download next time.
       - name: Restore Cypress binary cache
         id: cypress-cache
         uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae
@@ -73,24 +73,22 @@ jobs:
       - uses: ./.github/actions/pnpm-node-install
         name: Install Node, pnpm and dependencies.
 
-      # Guarantee the target directory exists on a cache miss. Cypress will
-      # not create a missing CYPRESS_CACHE_FOLDER automatically.
+      # On a cache miss this directory does not exist. Cypress will not
+      # create a missing CYPRESS_CACHE_FOLDER automatically.
       - name: Ensure Cypress cache folder exists
         run: mkdir -p .cypress-cache
         shell: bash
 
-      # Explicit install is the definitive fix. Package managers (pnpm,
-      # Yarn Berry, npm 12+) may skip a dependency's postinstall by default,
-      # so the binary is never downloaded on a cold cache.
-      # npx is used for consistency across package managers and to avoid
-      # ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL in pnpm workspaces where cypress
-      # is a child-package dependency.
+      # .npmrc sets side-effects-cache=false, so the postinstall should have
+      # run during pnpm install. This explicit install is the belt-and-braces
+      # guarantee: it downloads the binary even if pnpm skipped the hook.
+      # npx --no-install avoids ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL in pnpm
+      # workspaces where cypress is not a root dependency.
       - name: Install Cypress binary
         run: npx --no-install cypress install
         shell: bash
 
-      # Fail before the tests start if the binary is still unusable,
-      # instead of producing a misleading "test failed" status.
+      # Fail here with a clear message instead of inside the test step.
       - name: Verify Cypress binary
         run: npx --no-install cypress verify
         shell: bash
@@ -102,6 +100,7 @@ jobs:
         with:
           path: .cypress-cache
           key: ${{ steps.cypress-cache.outputs.cache-primary-key }}
+        # Parallel shards race for the same key; a losing save is harmless.
         continue-on-error: true
 
       - uses: ./.github/actions/uv-python-install
@@ -123,7 +122,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always() && hashFiles('cypress/screenshots/**') != ''
         with:
-          name: cypress-screenshots-${{ matrix.os }}-${{ matrix.containers }}
+          name: cypress-screenshots-${{ matrix.containers }}
           path: cypress/screenshots
           if-no-files-found: ignore
           retention-days: 7
